@@ -1,29 +1,49 @@
-# SSL 憑證更換 - LetsEncrypt
+## Labs
 
-## How LetsEncrypt works
+* **情境**：在「沒有正式 domain name」的情況，在本地體驗一下 letsencrypt 的流程。
 
-* **目標**：確認你是該網域的擁有者 (以下將以 www.example.com 為例)
+### Overview
 
-* **方法**：透過[ACME 協定](https://zh.wikipedia.org/zh-tw/%E8%87%AA%E5%8B%95%E6%86%91%E8%AD%89%E6%9B%B4%E6%96%B0%E7%92%B0%E5%A2%83/)來驗證。
+Lab 會使用 **Docker** 跑以下 3 個容器：
 
-    1. 由 ACME client (例如在伺服器安裝certbot) 來向 ACME server (例如 LetsEncrypt) 申請憑證。
+| 容器名稱 | 角色 | 核心任務 |
+|--------|------|--------|
+| Pebble | CA 認證單位 | 扮演 Let's Encrypt 伺服器，負責發放 Token 與簽發證書。 |
+| Certbot | ACME client | 負責向 Pebble 申請證書，並處理挑戰驗證（Challenge）。 |
+| Nginx | Web server | 對外提供 80 port（ACME驗證用）與 443 port（加密連線）。 |
 
-    2. 根據申請域名的不同，驗證過程可分為兩種：
-    
-        * 單一域名憑證：ACME server 會要求 ACME client 在 www.example.com 上放置一個特定的檔案 (例如 http://www.example.com/.well-known/acme-challenge/12345)，以確認你是該網域的擁有者。
+流程概述：
 
-            > **./well-known**：這是一個公認的網頁路徑(由[RFC 8615](https://www.rfc-editor.org/info/rfc8615)定義)，目的是在不同 http server 之間，提供該 http server 相關的一些資訊。
+1. 準備「驗證用」的 nginx config
+2. 把三個容器跑起來，分別扮演 CA 認證單位、ACME client、Web server 的角色。
+3. 使用 certbot 來申請憑證。成功申請到的憑證會放在 certbot container 的 `/etc/letsencrypt/live/${domain_name}/` 目錄下。
+4. 把憑證放到「正式」的 nginx config 上，並且測試看看。
+ 
 
-        * 泛域名憑證：ACME server 會要求 ACME client 在 DNS 上新增一個特定的 TXT 紀錄 (例如 _acme-challenge.www.example.com)，以確認你是該網域的擁有者。
+### 環境準備
 
-            > **泛域名(Wildcard domain)**：例如 *.example.com，代表 example.com 以及所有以 .example.com 結尾的子域名，例如 www.example.com、api.example.com 等等。
+1. [安裝 Docker](https://docs.docker.com/engine/install/)
 
+2. 建立 Lab 目錄 & 必要的子目錄：
 
+```bash
+mkdir -p pebble-lab && cd pebble-lab
 
-> 實務上可使用 letsencrypt 的 [Certbot](https://certbot.eff.org/) 來自動化這個過程，Certbot 會幫你處理 ACME client 的部分，並且在驗證成功後，幫你把憑證放到指定的位置。
+# 建立關鍵目錄
+# webroot：會掛載到 nginx container 上，作為 ACME 驗證用的目錄。
+# letsencrypt：會掛載到 certbot container 上，作為憑證放置的目錄。
+mkdir -p webroot letsencrypt
 
+# (Optional) 調整權限，確保 docker container 可以讀寫這些目錄。
+sudo chmod -R 777 webroot letsencrypt
+```
 
-## 實作
+3. 下載 pebble 設定檔：
+
+```bash
+curl -o pebble-config.json https://raw.githubusercontent.com/letsencrypt/pebble/main/test/config/pebble-config.json
+```
+
 
 1. 準備｢驗證用」的 nginx config：
 
@@ -161,4 +181,3 @@ docker run --rm \
     -v $cert_path/conf:/etc/letsencrypt/:rw \
     certbot/certbot:latest renew
 ```
-
