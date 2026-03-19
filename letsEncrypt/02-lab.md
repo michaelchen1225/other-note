@@ -20,7 +20,7 @@ Lab 會使用 **Docker** 跑以下 3 個容器：
 4. 把憑證放到「正式」的 nginx config 上，並且測試看看。
  
 
-### 環境準備
+### Step 1：環境準備
 
 1. [安裝 Docker](https://docs.docker.com/engine/install/)
 
@@ -38,10 +38,43 @@ mkdir -p webroot letsencrypt
 sudo chmod -R 777 webroot letsencrypt
 ```
 
-3. 下載 pebble 設定檔：
+### Step 2：準備設定檔
+
+下載 pebble 設定檔：
 
 ```bash
 curl -o pebble-config.json https://raw.githubusercontent.com/letsencrypt/pebble/main/test/config/pebble-config.json
+```
+
+建立 nginx 設定檔：
+
+```bash
+server {
+    listen 80;
+    server_name my-test-domain.com;
+
+    # ACME 驗證路徑
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 200 "Hello, this is HTTP!\n";
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name my-test-domain.com;
+
+    # 憑證路徑 (這是 Certbot 生成後的預設路徑)
+    ssl_certificate /etc/letsencrypt/live/my-test-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/my-test-domain.com/privkey.pem;
+
+    location / {
+        return 200 "Hello, this is Secure HTTPS!\n";
+    }
+}
 ```
 
 
@@ -180,4 +213,50 @@ docker run --rm \
     -v $cert_path/www:/var/www/certbot/:rw \
     -v $cert_path/conf:/etc/letsencrypt/:rw \
     certbot/certbot:latest renew
+```
+
+
+* renew script
+
+```bash
+#!/bin/bash
+
+# Configuration
+CERT_FILE="/data/certbot_data/conf/live/dhub.hinet.net/fullchain.pem"
+# Corrected image tag as per your update
+CERTBOT_IMAGE="harbor.cht.com.tw:30725/p4u-project/shared/aud/docker-certbot:28.3.3-dind"
+VOLUMES="-v /data/certbot_data/conf:/etc/letsencrypt -v /data/certbot_data/www:/var/www/certbot"
+
+# 1. Check expiration using openssl
+EXP_DATE=$(openssl x509 -enddate -noout -in "$CERT_FILE" | cut -d= -f2)
+EXP_SECONDS=$(date -d "$EXP_DATE" +%s)
+NOW_SECONDS=$(date +%s)
+THRESHOLD_SECONDS=$(( 30 * 24 * 3600 )) # 30 days in seconds
+
+# 2. Logic check
+if [ $(( EXP_SECONDS - NOW_SECONDS )) -le $THRESHOLD_SECONDS ]; then
+    echo "$(date): Certificate expires soon. Starting Docker renewal..."
+    
+    # Run Certbot and capture all output (stdout and stderr) into a variable
+    # Removed --quiet so we can actually see what happened in the log if it fails
+    RENEW_OUTPUT=$(docker run --rm $VOLUMES $CERTBOT_IMAGE certbot renew 2>&1)
+    EXIT_CODE=$?
+    
+    # 3. Handle results
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo "$(date): Renewal successful."
+        echo "Certbot Output: $RENEW_OUTPUT"
+        echo "Reloading Nginx daemon..."
+        systemctl reload nginx
+    else
+        echo "$(date): ERROR - Certbot renewal failed with exit code $EXIT_CODE."
+        echo "-------------------------------------------"
+        echo "FULL CERTBOT ERROR OUTPUT:"
+        echo "$RENEW_OUTPUT"
+        echo "-------------------------------------------"
+        exit 1
+    fi
+else
+    echo "$(date): Certificate is still valid ($(( (EXP_SECONDS - NOW_SECONDS) / 86400 )) days left). No action taken."
+fi
 ```
