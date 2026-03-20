@@ -1,6 +1,6 @@
 # SSL 憑證更換 - LetsEncrypt
 
-## 目錄
+## Direction
 
 * [How LetsEncrypt works](#how-letsencrypt-works)
 * [Lab](02-lab.md)

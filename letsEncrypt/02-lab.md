@@ -1,4 +1,4 @@
-## Labs
+## Lab - Pebble & Certbot
 
 * **情境**：在「沒有正式 domain name」的情況，在本地體驗一下 letsencrypt 的流程。
 
