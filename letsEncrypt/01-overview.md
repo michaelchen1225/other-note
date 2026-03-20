@@ -3,6 +3,8 @@
 ## 目錄
 
 * [How LetsEncrypt works](#how-letsencrypt-works)
+* [Lab](02-lab.md)
+* [Prod](03-prod.md)
 
 ## How LetsEncrypt works
 
@@ -26,6 +28,9 @@
 
 * 實務上可使用 letsencrypt 的 [Certbot](https://certbot.eff.org/) 來自動化這個過程，Certbot 會幫你處理 ACME client 的部分，並且在驗證成功後，幫你把憑證放到指定的位置。
 
+* 以上是關於 LetsEncrypt 的基本運作原理，實際操作的細節可參考：
+  * [Lab](02-lab.md)：在本地環境模擬整個申請流程，適合沒有正式 domain 的環境、或者想要先熟悉流程的人。
+  * [實務操作](03-prod.md)：筆者個人在正式環境中更換、renew 憑證的筆記。
 
 
 
