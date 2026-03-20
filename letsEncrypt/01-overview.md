@@ -14,13 +14,13 @@
 
     2. 根據申請域名的不同，驗證過程可分為兩種：
     
-        * 單一域名憑證：ACME server 會要求 ACME client 在 www.example.com 上放置一個特定的檔案 (例如 http://www.example.com/.well-known/acme-challenge/12345)，以確認你是該網域的擁有者。
+        * **HTTP-01 challenge**：用來申請單一域名憑證，ACME server 會要求 ACME client 在 www.example.com 上放置一個特別的檔案，以確認你是該網域的擁有者。這個特別的檔案會放在 webroot 目錄下的 **.well-known/acme-challenge/** 路徑中，ACME server 會透過 HTTP 請求來驗證這個檔案是否存在 & 內容是否正確。
 
             > **./well-known**：這是一個公認的網頁路徑(由[RFC 8615](https://www.rfc-editor.org/info/rfc8615)定義)，目的是在不同 http server 之間，提供該 http server 相關的一些資訊。
 
-        * 泛域名憑證：ACME server 會要求 ACME client 在 DNS 上新增一個特定的 TXT 紀錄 (例如 _acme-challenge.www.example.com)，以確認你是該網域的擁有者。
+        * **DNS-01 challenge**：用來申請泛域名憑證(萬用憑證)，ACME server 會要求 ACME client 在 DNS 上新增一個特定的 TXT 紀錄，以確認你是該網域的擁有者。
 
-            > **泛域名(Wildcard domain)**：例如 *.example.com，代表 example.com 以及所有以 .example.com 結尾的子域名，例如 www.example.com、api.example.com 等等。
+            > **泛域名(Wildcard domain)**：星號(*)開頭的 domain，例如 *.example.com，可代表 example.com 以及所有以 .example.com 結尾的子域名，例如 www.example.com、api.example.com 等等。
 
 
 
