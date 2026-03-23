@@ -1,5 +1,21 @@
 ## Production - config & renewal
 
+## Directory
+
+* [nginx config](#nginx-config)
+* [Cerbot 參數 (docker run)](#cerbot-參數-docker-run)
+* [一些踩過的坑](#一些踩過的坑)
+    * [檢查 80/443 port 是否被其他服務占用](#檢查-80443-port-是否被其他服務占用)
+    * [提前建立 `/var/www/certbot/.well-known/acme-challenge/`，並且把權限調整好](#提前建立-varwwwcertbotwell-knownacme-challenge-並且把權限調整好)
+    * [啟動 nginx 後，隨便在 `/var/www/certbot/.well-known/acme-challenge/` 放一個測試檔案，確保可以透過 HTTP 連到](#啟動-nginx-後隨便在-varwwwcertbotwell-knownacme-challenge-放一個測試檔案確保可以透過-http-連到)
+    * [SELinux 問題 (CentOS 環境)](#selinux-問題-centos-環境)
+    * [(補充) Nginx 作為 proxy，無法連到後端服務](#補充-nginx-作為-proxy無法連到後端服務)
+    * [(補充) Nginx 設定檔重新載入](#補充-nginx-設定檔重新載入)
+     * [(補充) Nginx 的重要 log](#補充-nginx-的重要-log)
+
+* [Renewal](#renewal)
+
+
 ### nginx config
 
 * **try_files**：明確的定義如果找不到 acme 驗證檔就回傳 404，以免被其他 location block (例如 proxy_pass) 給攔截了，丟出 502、403 這種其他的 error code。
@@ -44,7 +60,7 @@ server {
 }
 ```
 
-### Cerbot 參數
+### Cerbot 參數 (docker run)
 
 ```bash
 docker run -it --rm \
@@ -63,16 +79,31 @@ docker run -it --rm \
 
 ### 一些踩過的坑
 
+
 由於正式環境可能會有比較多權限方面的限制，可能導致 certbot 再驗證時出問題，可以參考以下方式提前預防：
 
-#### 提前建立 `/var/www/certbot/.well-known/acme-challenge/`，並且把權限調整好：
+
+#### ❗檢查 80/443 port 是否被其他服務占用
+
+```bash
+netstat -tlnp | grep 80
+netstat -tlnp | grep 443
+```
+
+若沒有 netstat 指令，可以用 ss：
+
+```bash
+ss -tlnp | grep LISTEN
+```
+
+#### ❗提前建立 `/var/www/certbot/.well-known/acme-challenge/`，並且把權限調整好
 
 ```bash
 sudo mkdir -p /var/www/certbot/.well-known/acme-challenge/
 sudo chmod -R 755 /var/www/certbot
 ```
 
-#### 啟動 nginx 後，隨便在 `/var/www/certbot/.well-known/acme-challenge/` 放一個測試檔案，確保可以透過 HTTP 連到：
+#### ❗啟動 nginx 後，隨便在 `/var/www/certbot/.well-known/acme-challenge/` 放一個測試檔案，確保可以透過 HTTP 連到
 
 ```bash
 echo "test" | sudo tee /var/www/certbot/.well-known/acme-challenge/test
@@ -80,7 +111,7 @@ echo "test" | sudo tee /var/www/certbot/.well-known/acme-challenge/test
 > 然後用瀏覽器或 curl 來測試
 
 
-#### SELinux 問題 (CentOS 環境)
+#### ❗SELinux 問題 (CentOS 環境)
 
 * 先確認 SELinux 有沒有開啟：
 
@@ -110,6 +141,39 @@ docker run -it --rm \
         -v /data/certbot_data/conf:/etc/letsencrypt/:rw,Z \
 (底下省略)
 ```
+
+#### ❗(補充) Nginx 作為 proxy，無法連到後端服務
+
+這個與憑證無關，不過如果發現 nginx 連不到後端服務，可能是 SELinux 阻擋了對外連線，可以用以下指令開放：
+
+```bash
+setsebool -P httpd_can_network_connect 1
+```
+
+#### ❗(補充) Nginx 設定檔重新載入
+
+* 驗證新的設定檔是否正確：
+
+```bash
+nginx -t
+```
+
+* 重新載入設定檔：
+
+```bash
+nginx -s reload
+```
+
+#### ❗(補充) Nginx 的重要 log
+
+* Access log: `/var/log/nginx/access.log`
+
+* Error log: `/var/log/nginx/error.log`
+
+* System Log: `journalctl -u nginx` (如果是用 systemd 管理 nginx 的話)
+
+
+### Renewal
 
 
 * renew script
@@ -157,26 +221,17 @@ else
 fi
 ```
 
+* 排程任務
 
+```bash
+cp ./renew_cert.sh /usr/local/bin/renew_cert.sh
+chmod +x /usr/local/bin/renew_cert.sh
+
+# 每天凌晨 2 點執行 renew_cert.sh
+echo "0 2 * * * /usr/local/bin/renew_cert.sh >> /var/log/certbot_renew.log 2>&1" | crontab -
+
+crontab -l
 ```
-# 1. 啟用 TLS 1.2 與 1.3 (修復 PQC 無法運作的問題)
-ssl_protocols TLSv1.2 TLSv1.3;
 
-# 2. 指定密鑰交換曲線 (設定 PQC 混合模式為第一優先) ssl_ecdh_curve X25519MLKEM768:X25519:secp384r1:prime256v1;
 
-# 3. 修復 WebInspect 弱點：套用報告官方建議的強加密套件 (僅對 TLS 1.2 有效)
-# 這行設定徹底排除了 CBC、SHA1 以及金鑰長度過短的弱點演算法
-ssl_ciphers
-ECDHE-ECDSA-AES128-GCM-SHA256
-ECDHE-RSA-AES128-GCM-SHA256
-ECDHE-ECDSA-AES256-GCM-SHA384
-ECDHE-RSA-AES256-GCM-SHA384
-ECDHE-ECDSA-CHACHA20-POLY1305
-ECDHE-RSA-CHACHA20-POLY1305
-DHE-RSA-AES128-GCM-SHA256
-DHE-RSA-AES256-GCM-SHA384
-DHE-RSA-CHACHA20-POLY1305;
 
-# 強制優先使用伺服器端決定的加密套件
-ssl_prefer_server_ciphers on;
-```
