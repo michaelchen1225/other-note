@@ -3,8 +3,8 @@
 ## Direction
 
 * [How LetsEncrypt works](#how-letsencrypt-works)
-* [Lab](./letsEncrypt/02-lab.md)
-* [Prod](./letsEncrypt/03-prod.md)
+* [Lab](02-lab.md)
+* [Prod](03-prod.md)
 
 ## How LetsEncrypt works
 
